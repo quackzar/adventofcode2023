@@ -13,7 +13,7 @@ enum Color {
     Blue,
 }
 
-use regex::{Regex};
+use regex::Regex;
 
 fn parse(game: &str) -> Vec<Vec<(i32, Color)>> {
     let re = Regex::new(r"(?<num>\d+) (?<color>\w+)").unwrap();
@@ -40,11 +40,12 @@ fn parse(game: &str) -> Vec<Vec<(i32, Color)>> {
 
 
 fn main() {
-    let reds = 12;
-    let greens = 13;
-    let blues = 14;
+    let red_power = 12;
+    let green_power = 13;
+    let blue_power = 14;
 
     let re = Regex::new(r"^Game (?<id>\d+)").unwrap();
+    let mut good_games = Vec::new();
     let mut powers = Vec::new();
     for line in INPUT.lines() {
         let Some(caps) = re.captures(line) else {
@@ -53,21 +54,31 @@ fn main() {
         let id : u32 = caps["id"].parse().unwrap();
 
         let game = parse(line);
-        let mut max_red = 0;
-        let mut max_green = 0;
-        let mut max_blue = 0;
+        let mut reds = 0;
+        let mut greens = 0;
+        let mut blues = 0;
         for draw in game {
             for balls in draw {
                 match balls {
-                    (num, Color::Red) => max_red = max_red.max(num),
-                    (num, Color::Green) => max_green = max_green.max(num),
-                    (num, Color::Blue) => max_blue = max_blue.max(num),
+                    (num, Color::Red) => reds = reds.max(num),
+                    (num, Color::Green) => greens = greens.max(num),
+                    (num, Color::Blue) => blues = blues.max(num),
                 }
             }
         }
-        let power = max_red * max_green * max_blue;
+        if reds <= red_power && greens <= green_power && blues <= blue_power {
+            good_games.push(id);
+        }
+        let power = reds * greens * blues;
         powers.push(power)
     }
+
+    println!("Part 1");
+    println!("Good games: {good_games:#?}");
+    let sum : u32 = good_games.into_iter().sum();
+    println!("Sum = {sum}\n");
+
+    println!("Part 2");
     println!("Powers: {powers:#?}");
     let sum : i32 = powers.into_iter().sum();
     println!("Sum = {sum}");
