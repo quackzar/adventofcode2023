@@ -45,7 +45,7 @@ fn main() {
     let blues = 14;
 
     let re = Regex::new(r"^Game (?<id>\d+)").unwrap();
-    let mut good_games = Vec::new();
+    let mut powers = Vec::new();
     for line in INPUT.lines() {
         let Some(caps) = re.captures(line) else {
             continue;
@@ -53,22 +53,22 @@ fn main() {
         let id : u32 = caps["id"].parse().unwrap();
 
         let game = parse(line);
-        let mut valid = true;
+        let mut max_red = 0;
+        let mut max_green = 0;
+        let mut max_blue = 0;
         for draw in game {
             for balls in draw {
-                valid &= match balls {
-                    (num, Color::Red) => reds >= num,
-                    (num, Color::Green) => greens >= num,
-                    (num, Color::Blue) => blues >= num,
+                match balls {
+                    (num, Color::Red) => max_red = max_red.max(num),
+                    (num, Color::Green) => max_green = max_green.max(num),
+                    (num, Color::Blue) => max_blue = max_blue.max(num),
                 }
             }
-            if !valid {break;}
         }
-        if valid {
-            good_games.push(id);
-        }
+        let power = max_red * max_green * max_blue;
+        powers.push(power)
     }
-    println!("Good games: {good_games:#?}");
-    let sum : u32 = good_games.iter().sum();
+    println!("Powers: {powers:#?}");
+    let sum : i32 = powers.into_iter().sum();
     println!("Sum = {sum}");
 }
