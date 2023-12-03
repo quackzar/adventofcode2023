@@ -26,7 +26,7 @@ fn main() {
     solve(&input);
 }
 
-fn solve(input: &str) -> u32 {
+fn solve(input: &str) -> (u32, u32) {
     let sym_re = regex::Regex::new(r"[:-@]|[!-/--.]").unwrap();
     let num_re = regex::Regex::new(r"\d+").unwrap();
 
@@ -51,32 +51,37 @@ fn solve(input: &str) -> u32 {
         .collect();
 
     let mut all = Vec::new();
+    let mut gear_ratios = Vec::new();
     for sym in syms {
         let ((row, col), sym) = sym;
-        // horizontal & diagonal
-        let horizontal = nums.iter().filter(|(h, v, _)| {
-            // let start = s.saturating_sub(1);
-            // let end = e + 1;
-            // (row as isize - *r as isize).abs() <= 1 && (col >= start && col <= end)
-            h.contains(&row) && v.contains(&col)
-        });
-
-        let mut found: Vec<_> = horizontal
+        let mut found: Vec<_> = nums
+            .iter()
+            .filter(|(h, v, _)| h.contains(&row) && v.contains(&col))
             .map(|(_, _, num)| Part {
                 num: num.parse().unwrap(),
                 sym,
             })
             .collect();
 
+        if sym == '*' && found.len() > 1 {
+            gear_ratios.push(found.iter().map(|Part{sym: _, num}| num).product());
+        }
         all.append(&mut found);
     }
 
     let sum : u32 = all.iter().map(|p| p.num).sum();
+    let gear_sum : u32 = gear_ratios.iter().sum();
     dbg!(sum);
-    sum
+    dbg!(gear_sum);
+    (sum, gear_sum)
 }
 
 #[test]
-fn demo() {
-    assert_eq!(solve(INPUT), 4361);
+fn part1() {
+    assert_eq!(solve(INPUT).0, 4361);
+}
+
+#[test]
+fn part2() {
+    assert_eq!(solve(INPUT).1, 467835);
 }
