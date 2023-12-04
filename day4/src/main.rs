@@ -58,11 +58,13 @@ fn solve2(input: &str) -> usize {
     let old_cards = &mut card_stack1;
     let new_cards = &mut card_stack2;
 
+
+    let scores : Vec<_> = cards.iter().map(|(winning, holding)| score(winning, holding)).collect();
     loop {
-        for (i, (winning, holding)) in old_cards.iter().map(|&i| (i, &cards[i])) {
-            let points = score(winning, holding) as usize;
+        for &i in old_cards.iter() {
+            let points = scores[i];
             for j in 1..=points {
-                new_cards.push(i + j)
+                new_cards.push(i + j as usize)
             }
         }
         if new_cards.is_empty() {
