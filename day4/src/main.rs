@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::{io::Read, mem::swap};
 
 const INPUT: &str = "\
 Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
@@ -12,32 +12,75 @@ Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 1
 fn main() {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input).unwrap();
-    let solution = solve(&input);
-    println!("Solution {solution}");
+    let solution = solve1(&input);
+    println!("Part 1 {solution}");
+    let solution = solve2(&input);
+    println!("Part 2 {solution}");
 }
 
-fn solve(input: &str) -> u32 {
-    let mut scores = Vec::new();
-    for line in input.lines() {
+fn parse(input: &str) -> Vec<(Vec<u8>, Vec<u8>)> {
+    input.lines().map(|line| {
         let (card, numbers) = line.split_once(':').unwrap();
         let (_, _num) = card.split_once(' ').unwrap();
         let (winning, holding) = numbers.split_once('|').unwrap();
         let winning : Vec<u8> = winning.split(' ').filter_map(|num| num.parse().ok()).collect();
         let holding : Vec<u8> = holding.split(' ').filter_map(|num| num.parse().ok()).collect();
+        (winning, holding)
+    }).collect()
+}
 
-        let mut wins = 0;
-        for &win_num in &winning {
-            let win = holding.iter().any(|&n| n == win_num);
-            wins += win as u32;
-        }
-        let score = if wins != 0 {1 << (wins - 1)} else {0};
-        scores.push(score);
+fn score(winning: &[u8], holding: &[u8]) -> u32 {
+    let mut wins = 0;
+    for &win_num in winning {
+        let win = holding.iter().any(|&n| n == win_num);
+        wins += win as u32;
     }
-    scores.iter().sum()
+    wins
+}
+
+fn solve1(input: &str) -> u32 {
+    let mut total_points = Vec::new();
+    let cards = parse(input);
+
+    for (winning, holding) in cards {
+        let points = score(&winning, &holding);
+        let points = if points != 0 {1 << (points - 1)} else {0};
+        total_points.push(points);
+    }
+    total_points.iter().sum()
+}
+
+fn solve2(input: &str) -> usize {
+    let cards = parse(input);
+    let mut card_stack1 : Vec<usize> = (0..cards.len()).collect();
+    let mut card_stack2 : Vec<usize> = Vec::new();
+    let mut cards_total = card_stack1.len();
+    let old_cards = &mut card_stack1;
+    let new_cards = &mut card_stack2;
+
+    loop {
+        for (i, (winning, holding)) in old_cards.iter().map(|&i| (i, &cards[i])) {
+            let points = score(winning, holding) as usize;
+            for j in 1..=points {
+                new_cards.push(i + j)
+            }
+        }
+        if new_cards.is_empty() {
+            break;
+        }
+        cards_total += new_cards.len();
+        old_cards.clear();
+        swap(old_cards, new_cards);
+    };
+    cards_total
 }
 
 
 #[test]
 fn part1() {
-    assert_eq!(solve(INPUT), 13);
+    assert_eq!(solve1(INPUT), 13);
+}
+#[test]
+fn part2() {
+    assert_eq!(solve2(INPUT), 30);
 }
