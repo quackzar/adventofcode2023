@@ -13,9 +13,9 @@ fn main() {
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Hand([Card; 5]);
+struct Hand<const J: bool>([Card<J>; 5]);
 
-impl Display for Hand {
+impl<const J: bool> Display for Hand<J> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Hand([a,b,c,d,e]) = self;
         write!(f, "{a}{b}{c}{d}{e}")
@@ -34,15 +34,16 @@ enum HandType {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct Card(u8);
+struct Card<const JOKER: bool>(u8);
 
 
-impl Display for Card {
+impl<const JOKER: bool> Display for Card<JOKER> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let c = match self.0 {
             14 => 'A',
             13 => 'K',
             12 => 'Q',
+            0 => 'J',
             11 => 'J',
             10 => 'T',
             c => (c + b'0') as char,
@@ -51,8 +52,29 @@ impl Display for Card {
     }
 }
 
-impl Hand {
+impl<const J: bool> Hand<J> {
     fn kind(&self) -> HandType {
+        if !J {
+            self.no_joker()
+        } else {
+            let mut hand = self.0;
+            let mut best = self.no_joker();
+            // should end if no jokers
+            for (i, _) in self.0.iter().enumerate().filter(|(_, c)| c.0 == 0) {
+                // We only want to check with other cards we have, not all cards
+                for c in self.0.iter().unique().filter(|c| c.0 != 0) {
+                    hand[i] = *c;
+                    // recursion!
+                    let hand = Hand(hand);
+                    let new_kind = hand.kind();
+                    best = best.max(new_kind);
+                }
+            }
+            best
+        }
+    }
+
+    fn no_joker(&self) -> HandType {
         let Hand(mut hand) = self;
         if hand.iter().all_equal() {
             return HandType::FiveOfAKind;
@@ -84,7 +106,7 @@ impl Hand {
     }
 }
 
-impl Ord for Hand {
+impl<const J: bool> Ord for Hand<J> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match self.kind().cmp(&other.kind()) {
             std::cmp::Ordering::Less => std::cmp::Ordering::Less,
@@ -94,13 +116,13 @@ impl Ord for Hand {
     }
 }
 
-impl PartialOrd for Hand {
+impl<const J: bool> PartialOrd for Hand<J> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl TryFrom<char> for Card {
+impl<const JOKER: bool> TryFrom<char> for Card<JOKER> {
     type Error = ParseCharError;
 
     fn try_from(value: char) -> Result<Self, Self::Error> {
@@ -108,7 +130,7 @@ impl TryFrom<char> for Card {
             'A' => 14,
             'K' => 13,
             'Q' => 12,
-            'J' => 11,
+            'J' => if JOKER {0} else {11},
             'T' => 10,
             n @ '1'..='9' => n as u8 - b'0',
             _ => panic!("Could not parse {value}")
@@ -117,12 +139,12 @@ impl TryFrom<char> for Card {
     }
 }
 
-fn parse(input: &str) -> Vec<(Hand, u32)> {
+fn parse<const J: bool>(input: &str) -> Vec<(Hand<J>, u32)> {
     input.lines().map(|line| {
         let (hand, bid) = line.split_at(5);
-        let hand : [Card; 5] = hand.chars().map(|c| {
+        let hand : [Card<J>; 5] = hand.chars().map(|c| {
             Card::try_from(c).unwrap()
-        }).collect::<Vec<Card>>().try_into().unwrap();
+        }).collect::<Vec<_>>().try_into().unwrap();
 
         let hand = Hand(hand);
         let (_, bid)= bid.split_at(1);
@@ -132,12 +154,16 @@ fn parse(input: &str) -> Vec<(Hand, u32)> {
 }
 
 fn solve1(input: &str) -> u32 {
-    let mut hands = parse(input);
+    let mut hands = parse::<false>(input);
     hands.sort_unstable_by_key(|(hand, _)| *hand);
     hands.iter().enumerate().map(|(i, (_, bid))| (i as u32 + 1)*bid).sum()
 }
 
-fn solve2(input: &str) -> u32 { todo!()}
+fn solve2(input: &str) -> u32 {
+    let mut hands = parse::<true>(input);
+    hands.sort_unstable_by_key(|(hand, _)| *hand);
+    hands.iter().enumerate().map(|(i, (_, bid))| (i as u32 + 1)*bid).sum()
+}
 
 const INPUT : &str = "\
 32T3K 765
@@ -153,5 +179,5 @@ fn part1() {
 }
 #[test]
 fn part2() {
-    assert_eq!(solve2(INPUT), 71503);
+    assert_eq!(solve2(INPUT), 5905);
 }
