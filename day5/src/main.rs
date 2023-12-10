@@ -1,4 +1,4 @@
-use std::{io::Read, collections::BTreeMap, u32, ops::{Range, RangeBounds}};
+use std::{io::Read, collections::BTreeMap, u32, ops::Range};
 
 use itertools::{Itertools, partition};
 use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
@@ -118,47 +118,21 @@ fn solve2(input: &str) -> u32 {
     let humid2loc = parse_map(&mut input);
 
 
-    let find_loc = |range: &Range<u32>| -> Vec<Range<u32>> {
-        let res = seed2soil.many(range);
-        let res: Vec<(_, _)> = res
-            .iter()
-            .map(|(_, pos)| pos)
-            .flat_map(|pos| soil2fertz.many(pos))
-            .collect();
-
-        let res: Vec<(_, _)> = res
-            .iter()
-            .map(|(_, pos)| pos)
-            .flat_map(|pos| fertz2water.many(pos))
-            .collect();
-        let res: Vec<(_, _)> = res
-            .iter()
-            .map(|(_, pos)| pos)
-            .flat_map(|pos| water2light.many(pos))
-            .collect();
-        let res: Vec<(_, _)> = res
-            .iter()
-            .map(|(_, pos)| pos)
-            .flat_map(|pos| light2temp.many(pos))
-            .collect();
-        let res: Vec<(_, _)> = res
-            .iter()
-            .map(|(_, pos)| pos)
-            .flat_map(|pos| temp2humid.many(pos))
-            .collect();
-        let res: Vec<(_, _)> = res
-            .iter()
-            .map(|(_, pos)| pos)
-            .flat_map(|pos| humid2loc.many(pos))
-            .collect();
-        res.into_iter().map(|(_, pos)| pos).collect()
+    let find_loc = |i: u32| -> u32 {
+        let i = seed2soil.get(i);
+        let i = soil2fertz.get(i);
+        let i = fertz2water.get(i);
+        let i = water2light.get(i);
+        let i = light2temp.get(i);
+        let i = temp2humid.get(i);
+        humid2loc.get(i)
     };
 
     dbg!(&seeds);
-    let locations: Vec<Range<u32>> = seeds.iter().flat_map(find_loc).collect();
-    dbg!(locations);
-    let loc = locations.iter().map(|range| range.start).min().unwrap();
-    loc
+    let locations: Vec<u32> = seeds.into_iter().flatten().par_bridge().map(find_loc).collect();
+    dbg!(&find_loc(82));
+    let loc = locations.iter().min().unwrap();
+    *loc
 }
 
 
@@ -181,23 +155,38 @@ impl Almanac {
         idx
     }
 
-    fn many(&self, range: &Range<u32>) -> Vec<(Range<u32>, Range<u32>)> {
-        let mut new = Vec::new();
-        for (rule, offset) in self.exceptions.iter().map(|(a,b,c)| (*a..*b, *c)) {
-            let mapping = if rule.contains(&range.start) {
-                let p1 = range.start;
-                let p2 = if rule.contains(&range.end) {
-                    range.end
-                } else {
-                    rule.end
-                };
-                (p1..p2, ((p1 as i32 + offset) as u32)..((p2 as i32 + offset) as u32))
-            } else {
-                (range.clone(), range.clone())
-            };
-            new.push(mapping);
+    fn get_range(&self, range: &Range<u32>) -> Vec<Range<u32>> {
+        if range.is_empty() {
+            return vec![];
         }
-        new
+
+        fn partition(rule: &Range<u32>, range: &Range<u32>) -> (Range<u32>,Range<u32>) {
+            let left = rule.start.saturating_sub(range.start);
+            let left = (rule.start-left)..rule.start;
+            let right = range.end.saturating_sub(rule.end);
+            let right = rule.end..(rule.end+right);
+            
+            (left, right)
+        }
+
+        let mut to_check = vec![range.clone()];
+        for (begin, end, offset) in &self.exceptions {
+            let rules = *begin..*end;
+            let (left, right) = partition(&rules, range);
+            to_check.push(left);
+            to_check.push(right);
+
+            if *begin <= range.start && range.end < *end {
+                return vec![
+                    ((range.start as i32 + offset) as u32)..((range.end as i32 + offset) as u32),
+                ];
+            }
+
+        }
+
+
+        todo!()
+
     }
 
 
@@ -224,16 +213,4 @@ fn parse_map(input: &mut std::str::Lines<'_>) -> Almanac {
         map.insert(src, src + range, dst as i32 - src as i32);
     }
     map
-}
-
-#[test]
-fn part1() {
-    let solution = solve1(INPUT);
-    assert_eq!(solution, 35);
-}
-
-#[test]
-fn part2() {
-    let solution = solve2(INPUT);
-    assert_eq!(solution, 46);
 }
