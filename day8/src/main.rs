@@ -1,5 +1,6 @@
 // #![allow(clippy::explicit_counter_loop)]
 use std::{io::Read, collections::{BTreeMap, HashMap}, char::ParseCharError};
+use itertools::Itertools;
 
 fn main() {
     let mut input = String::new();
@@ -70,23 +71,47 @@ fn solve1(input: &str) -> u32 {
     steps
 }
 
-fn solve2(input: &str) -> u32 {
+fn solve2(input: &str) -> u64 {
     let (map, nodes) = parse(input);
-    let mut locs : Vec<_> = nodes.keys().filter(|loc| loc.0[2] == 'A').cloned().collect();
-    let n = locs.len();
-    let mut steps : u32 = 0;
-    for direction in map.iter().cycle() {
-        steps += 1;
-        for i in 0..n {
-            let (left, right) = nodes[&locs[i]];
-            locs[i] = match &direction {
+    let locs : Vec<_> = nodes.keys().filter(|loc| loc.0[2] == 'A').cloned().collect();
+    let mut stepping = Vec::new();
+    for intial_loc in locs {
+        let mut steps : u32 = 0;
+        let mut ends = BTreeMap::new();
+        let mut loc = intial_loc;
+        for direction in map.iter().cycle() {
+            steps += 1;
+            let (left, right) = nodes[&loc];
+            loc = match &direction {
                 Direction::Left => left,
                 Direction::Right => right,
             };
+            if loc.0[2] == 'Z' {
+                if ends.contains_key(&loc) {
+                    let diff = steps - ends[&loc];
+                    stepping.push(diff as u64);
+                    break;
+                }
+                ends.insert(loc, steps);
+            }
         }
-        if locs.iter().all(|c| c.0[2] == 'Z') { break; }
     }
-    steps
+    stepping.into_iter().fold(1, lcm)
+}
+
+fn lcm(a: u64, b: u64) -> u64 {
+    (a * b) / gcd(a,b)
+}
+
+fn gcd(mut n: u64, mut m: u64) -> u64 {
+  assert!(n != 0 && m != 0);
+  while m != 0 {
+    if m < n {
+      std::mem::swap(&mut m, &mut n);
+    }
+    m %= n;
+  }
+  n
 }
 
 const INPUT1: &str = "\
