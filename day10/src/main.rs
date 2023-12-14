@@ -1,4 +1,4 @@
-use std::{io::Read, collections::VecDeque, fmt::Display, time::Duration};
+use std::{io::Read, collections::{VecDeque, BTreeMap, BTreeSet}, fmt::Display, time::Duration};
 fn main() {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input).unwrap();
@@ -53,7 +53,6 @@ fn display_visited(pipe: &Pipe) -> char {
 }
 
 
-
 fn translate(ugly: &str) -> String {
     ugly.replace('|', "║")
         .replace('-', "═")
@@ -66,7 +65,11 @@ fn translate(ugly: &str) -> String {
 }
 
 fn parse(input: &str) -> Map {
-    let width = input.find('\n').unwrap() - 0; // TODO: Handle windows endings
+    let width = match input.find("\r\n") {
+        Some(width) => width,
+        None => input.find('\n').unwrap(),
+    };
+
     let data : Box<_> = input.lines().flat_map(|s| s.chars().map(|c| match c {
         '|' => Pipe::NorthSouth,
         '-' => Pipe::EastWest,
@@ -81,14 +84,14 @@ fn parse(input: &str) -> Map {
 
     let (i, _) = data.iter().enumerate().find(|(_, &p)| p == Pipe::Start).unwrap();
     let start_point = (i % width, i / width);
-    let visited = vec![None; data.len()].into_boxed_slice();
+    let visited = BTreeMap::new();
     Map { width, data, start_point, visited }
 }
 
 struct Map {
     width: usize,
     data: Box<[Pipe]>,
-    visited: Box<[Option<u16>]>,
+    visited: BTreeMap<(usize, usize), u16>,
     start_point: (usize, usize),
 }
 
@@ -153,19 +156,13 @@ impl Map {
     }
 
     fn visit(&mut self, pos: (usize, usize), value: u16) {
-        // if let Pipe::Visited(_) = self.data[pos.0 + pos.1 * self.width] {
-        //     return;
-        // }
-
-        // self.data[pos.0 + pos.1 * self.width] = Pipe::Visited(value);
-        let (x,y) = pos;
-        if let Some(_) = self.visited[x + y * self.width] {
-            return;
+        if self.visited.contains_key(&pos) {
+            return
         }
-        self.visited[x + y * self.width] = Some(value);
+        self.visited.insert(pos, value);
     }
-    fn is_visited(&self, (x,y): (usize, usize)) -> bool {
-        self.visited[x + y * self.width].is_some()
+    fn is_visited(&self, pos: (usize, usize)) -> bool {
+        self.visited.contains_key(&pos)
     }
 
     fn is_inside_map(&self, pos: (isize, isize)) -> bool {
@@ -183,9 +180,24 @@ fn solve1(input: &str) -> u32{
     let mut to_visit = VecDeque::new();
     to_visit.push_back((start_pos, 0));
     let size = map.size();
-    println!("{size:?}");
     while let Some((pos, step)) = to_visit.pop_front() {
-        // println!("{map}");
+        let neighbours = map.neighbours(pos);
+        map.visit(pos, step);
+        for pos in neighbours.iter() {
+            to_visit.push_back((*pos, step + 1));
+        }
+    };
+
+    *map.visited.values().max().unwrap() as u32
+}
+
+fn solve2(input: &str) -> u32 {
+    let mut map = parse(input);
+    let start_pos = map.start_point;
+    let mut to_visit = VecDeque::new();
+    to_visit.push_back((start_pos, 0));
+    let size = map.size();
+    while let Some((pos, step)) = to_visit.pop_front() {
         let neighbours = map.neighbours(pos);
         map.visit(pos, step);
         for pos in neighbours.iter() {
@@ -193,12 +205,15 @@ fn solve1(input: &str) -> u32{
         }
     };
     println!("{map}");
-
-    map.visited.iter().max().unwrap().unwrap() as u32
-}
-
-fn solve2(_input: &str) -> u32 {
-    todo!()
+    let mut seeds : VecDeque<(usize, usize)> = map.visited.keys().flat_map(|p| map.maybe_neighbours(*p).iter().filter(|p| !map.is_visited(**p)).cloned().collect::<Vec<_>>()).collect();
+    let mut colored = BTreeSet::new();
+    while let Some(seed) = seeds.pop_front() {
+        colored.insert(seed);
+        println!("{seed:?}");
+        map.maybe_neighbours(seed).iter().filter(|p| !map.is_visited(**p) && !colored.contains(*p)).for_each(|p| seeds.push_back(*p));
+    }
+    
+    colored.len() as u32
 }
 
 
@@ -209,12 +224,26 @@ SJ.L7
 |F--J
 LJ...";
 
+
+const INPUT2: &str = "\
+FF7FSF7F7F7F7F7F---7
+L|LJ||||||||||||F--J
+FL-7LJLJ||||||LJL-77
+F--JF--7||LJLJ7F7FJ-
+L---JF-JLJ.||-FJLJJ7
+|F|F-JF---7F7-L7L|7|
+|FFJF7L7F-JF7|JL---7
+7-L-JL7||F7|L7F-7F7|
+L.L7LFJ|||||FJL7||LJ
+L7JLJL-JLJLJL--JLJ.L
+";
+
 #[test]
 fn part1() {
     assert_eq!(solve1(INPUT), 8);
 }
 
-// #[test]
-// fn part2() {
-//     assert_eq!(solve2(INPUT), 0);
-// }
+#[test]
+fn part2() {
+    assert_eq!(solve2(INPUT2), 10);
+}
