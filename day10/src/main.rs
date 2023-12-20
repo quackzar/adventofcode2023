@@ -1,4 +1,4 @@
-use std::{io::Read, collections::{VecDeque, BTreeMap, BTreeSet}, fmt::Display, time::Duration};
+use std::{io::Read, collections::{VecDeque, BTreeMap, BTreeSet, HashMap, HashSet}, fmt::Display, time::Duration};
 fn main() {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input).unwrap();
@@ -84,14 +84,14 @@ fn parse(input: &str) -> Map {
 
     let (i, _) = data.iter().enumerate().find(|(_, &p)| p == Pipe::Start).unwrap();
     let start_point = (i % width, i / width);
-    let visited = BTreeMap::new();
+    let visited = HashMap::new();
     Map { width, data, start_point, visited }
 }
 
 struct Map {
     width: usize,
     data: Box<[Pipe]>,
-    visited: BTreeMap<(usize, usize), u16>,
+    visited: HashMap<(usize, usize), u16>,
     start_point: (usize, usize),
 }
 
@@ -129,6 +129,7 @@ impl Map {
         let me = pos;
         it.iter()
             .filter(|&pos| self.maybe_neighbours(*pos).contains(&me))
+            .filter(|p| !self.is_visited(**p))
             .cloned()
             .collect()
     }
@@ -151,7 +152,6 @@ impl Map {
         };
         it.iter().filter(|pos| self.is_inside_map(**pos))
             .map(|(x,y)| (*x as usize, *y as usize))
-            .filter(|p| !self.is_visited(*p))
             .collect()  
     }
 
@@ -170,6 +170,16 @@ impl Map {
             pos.1 >= 0 &&
             pos.0 < self.width as isize &&
             pos.1 < (self.data.len() / self.width) as isize 
+    }
+
+    fn quadrant(&self, (x,y): (usize, usize)) -> impl Iterator<Item = (usize, usize)> + '_ {
+        let x = x as isize;
+        let y = y as isize;
+
+        [(x-1,y), (x+1, y), (x, y-1), (x, y+1)].into_iter()
+            .filter(|p| self.is_inside_map(*p))
+            .map(|(x,y)| (x as usize, y as usize))
+
     }
 }
 
@@ -205,15 +215,57 @@ fn solve2(input: &str) -> u32 {
         }
     };
     println!("{map}");
-    let mut seeds : VecDeque<(usize, usize)> = map.visited.keys().flat_map(|p| map.maybe_neighbours(*p).iter().filter(|p| !map.is_visited(**p)).cloned().collect::<Vec<_>>()).collect();
-    let mut colored = BTreeSet::new();
-    while let Some(seed) = seeds.pop_front() {
-        colored.insert(seed);
-        println!("{seed:?}");
-        map.maybe_neighbours(seed).iter().filter(|p| !map.is_visited(**p) && !colored.contains(*p)).for_each(|p| seeds.push_back(*p));
-    }
+
+    let (left, right) = partition(&map);
+    dbg!(left.len());
+    dbg!(right.len());
+}
+
+enum Direction {
+    North, South, East, West
+}
+
+fn partition(map: &Map) -> (Vec<(usize, usize)>, Vec<(usize, usize)>){
+
+    let mut pos = map.start_point;
+    let mut seen = HashSet::new();
+    let mut direction;
+
     
-    colored.len() as u32
+
+
+    let mut left = Vec::new();
+    let mut right = Vec::new();
+    loop {
+        seen.insert(pos);
+        let connected_pipes : Vec<(usize,usize)> = map.maybe_neighbours(pos).iter().filter(|p| map.is_visited(**p)).cloned().collect();
+        let next = connected_pipes.iter().find(|p| !seen.contains(p));
+        match next {
+            Some(next) => {
+                direction = if next.0 > pos.0 { Direction::East } else if next.0 < pos.0 {
+                    Direction::West
+                } else if next.1 > pos.1 { Direction::South } else { Direction::North };
+
+                pos = *next
+            },
+            None => break,
+        }
+
+        let not_pipes : Vec<_> = map.quadrant(pos)
+            .filter(|p| !connected_pipes.contains(p)).collect();
+
+        let lower : Vec<_> = not_pipes.iter().filter(|(x,y)| *x < pos.0 || *y < pos.1).cloned().collect();
+        let upper : Vec<_> = not_pipes.iter().filter(|(x,y)| *x > pos.0 || *y > pos.1).cloned().collect();
+        let (mut lower, mut upper) = match direction {
+            Direction::North => (lower, upper),
+            Direction::South => (upper, lower),
+            Direction::East => (upper, lower),
+            Direction::West => (lower, upper),
+        };
+        left.append(&mut lower);
+        right.append(&mut upper);
+    }
+    (left, right)
 }
 
 
