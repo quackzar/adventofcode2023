@@ -85,7 +85,7 @@ fn parse(input: &str) -> Map {
     let (i, _) = data.iter().enumerate().find(|(_, &p)| p == Pipe::Start).unwrap();
     let start_point = (i % width, i / width);
     let visited = HashMap::new();
-    Map { width, data, start_point, visited }
+    Map { width, data, start_point, visited, mask: None }
 }
 
 struct Map {
@@ -93,14 +93,22 @@ struct Map {
     data: Box<[Pipe]>,
     visited: HashMap<(usize, usize), u16>,
     start_point: (usize, usize),
+    mask: Option<HashSet<(usize, usize)>>,
 }
 
 impl Display for Map {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let use_mask = self.mask.is_some();
         for (i, pipe) in self.data.iter().enumerate() {
             if i % self.width == 0 {
                 writeln!(f)?;
             }
+
+            if use_mask && self.mask.as_ref().unwrap().contains(&(i % self.width, i / self.width)) {
+                write!(f, "X")?;
+                continue;
+            }
+
             if self.is_visited((i % self.width, i / self.width)) {
 
 
@@ -109,6 +117,7 @@ impl Display for Map {
             } else {
                 write!(f, "{pipe}")?;
             }
+
         }
         Ok(())
     }
@@ -118,7 +127,6 @@ impl Map {
     fn get(&self, (x, y): (usize, usize)) -> Pipe {
         self.data[x + y * self.width]
     }
-
 
     fn size(&self) -> (usize, usize) {
         (self.width, self.data.len() / self.width)
@@ -189,7 +197,6 @@ fn solve1(input: &str) -> u32{
     let start_pos = map.start_point;
     let mut to_visit = VecDeque::new();
     to_visit.push_back((start_pos, 0));
-    let size = map.size();
     while let Some((pos, step)) = to_visit.pop_front() {
         let neighbours = map.neighbours(pos);
         map.visit(pos, step);
@@ -216,54 +223,152 @@ fn solve2(input: &str) -> u32 {
     };
     println!("{map}");
 
+    println!("Partitioning...");
     let (left, right) = partition(&map);
+    
+    println!("Filling left...");
+    let left = fill(&map, &left);
+    map.mask = Some(left.clone());
+    println!("{map}");
+
+    println!("Filling right...");
+    let right = fill(&map, &right);
+    map.mask = Some(right.clone());
+    println!("{map}");
+
     dbg!(left.len());
     dbg!(right.len());
+    right.len() as u32
 }
 
+fn fill(map: &Map, seeds: &HashSet<(usize, usize)>) -> HashSet<(usize, usize)> {
+    let mut to_visit = VecDeque::from_iter(seeds.iter().cloned());
+    let mut visisted = HashSet::new();
+    while let Some(pos) = to_visit.pop_front() {
+        if visisted.contains(&pos) {
+            continue;
+        }
+        visisted.insert(pos);
+        let neighbours = map.quadrant(pos);
+        for p in neighbours.filter(|p| !map.is_visited(*p)) {
+            to_visit.push_back(p);
+        }
+    };
+    visisted
+}
+
+#[derive(PartialEq, Eq)]
 enum Direction {
     North, South, East, West
 }
 
-fn partition(map: &Map) -> (Vec<(usize, usize)>, Vec<(usize, usize)>){
+fn partition(map: &Map) -> (HashSet<(usize, usize)>, HashSet<(usize, usize)>){
+    let mut left = HashSet::new();
+    let mut right = HashSet::new();
 
+    let mut direction = Direction::North;
     let mut pos = map.start_point;
-    let mut seen = HashSet::new();
-    let mut direction;
-
-    
-
-
-    let mut left = Vec::new();
-    let mut right = Vec::new();
+    let mut visisted = HashSet::new();
     loop {
-        seen.insert(pos);
-        let connected_pipes : Vec<(usize,usize)> = map.maybe_neighbours(pos).iter().filter(|p| map.is_visited(**p)).cloned().collect();
-        let next = connected_pipes.iter().find(|p| !seen.contains(p));
-        match next {
-            Some(next) => {
-                direction = if next.0 > pos.0 { Direction::East } else if next.0 < pos.0 {
-                    Direction::West
-                } else if next.1 > pos.1 { Direction::South } else { Direction::North };
-
-                pos = *next
-            },
-            None => break,
+        let pipe = map.get(pos);
+        visisted.insert(pos);
+        if !map.is_visited(pos) {
+            panic!("We are at a bad place");
         }
-
-        let not_pipes : Vec<_> = map.quadrant(pos)
-            .filter(|p| !connected_pipes.contains(p)).collect();
-
-        let lower : Vec<_> = not_pipes.iter().filter(|(x,y)| *x < pos.0 || *y < pos.1).cloned().collect();
-        let upper : Vec<_> = not_pipes.iter().filter(|(x,y)| *x > pos.0 || *y > pos.1).cloned().collect();
-        let (mut lower, mut upper) = match direction {
-            Direction::North => (lower, upper),
-            Direction::South => (upper, lower),
-            Direction::East => (upper, lower),
-            Direction::West => (lower, upper),
+        let (x,y) = pos;
+        match pipe {
+            Pipe::Start => {
+                dbg!("Visited start!");
+                let Some(&p) = map
+                    .maybe_neighbours(pos)
+                    .iter()
+                    .filter(|p| map.is_visited(**p))
+                    .find(|p| !visisted.contains(*p))
+                else {
+                    break;
+                };
+                pos = p;
+                if pos.0 < map.start_point.0 {
+                    direction = Direction::West
+                } else if pos.0 > map.start_point.0 {
+                    direction = Direction::East
+                } else if pos.1 < map.start_point.1 {
+                    direction = Direction::North
+                } else if pos.1 > map.start_point.1 {
+                    direction = Direction::South
+                } else {
+                    panic!("oops");
+                }
+            },
+            Pipe::NorthSouth => {
+                if direction == Direction::South {
+                    pos = (x, y + 1);
+                } else { // Direction is North
+                    pos = (x, y - 1);
+                }
+            },
+            Pipe::EastWest => {
+                if direction == Direction::West {
+                    pos = (x - 1, y);
+                } else { // Direction is East
+                    pos = (x + 1, y);
+                }
+            },
+            Pipe::NorthEast => {
+                if direction == Direction::West {
+                    direction = Direction::North;
+                    pos = (x, y - 1);
+                } else { // Direction is South
+                    direction = Direction::East;
+                    pos = (x + 1, y);
+                }
+            },
+            Pipe::NorthWest => {
+                if direction == Direction::East {
+                    direction = Direction::North;
+                    pos = (x, y - 1);
+                } else { // Direction is South
+                    direction = Direction::West;
+                    pos = (x - 1, y);
+                }
+            },
+            Pipe::SouthWest => {
+                if direction == Direction::East {
+                    direction = Direction::South;
+                    pos = (x, y + 1);
+                } else { // Direction is North
+                    direction = Direction::West;
+                    pos = (x - 1, y);
+                }
+            },
+            Pipe::SouthEast => {
+                if direction == Direction::West {
+                    direction = Direction::South;
+                    pos = (x, y + 1);
+                } else { // Direction is North
+                    direction = Direction::East;
+                    pos = (x + 1, y);
+                }
+            },
+            _ => {},
         };
-        left.append(&mut lower);
-        right.append(&mut upper);
+
+        let x = x as isize;
+        let y = y as isize;
+        let [l,r] = match direction {
+            Direction::North => [(x-1,y), (x+1,y)],
+            Direction::South => [(x+1,y), (x-1,y)],
+            Direction::East => [(x,y-1), (x,y+1)],
+            Direction::West => [(x,y+1), (x,y-1)],
+        };
+        let l0 = (l.0 as usize, l.1 as usize);
+        let r0 = (r.0 as usize, r.1 as usize);
+        if map.is_inside_map(l) && !map.is_visited(l0) {
+            left.insert(l0);
+        }
+        if map.is_inside_map(r) && !map.is_visited(r0) {
+            right.insert(r0);
+        }
     }
     (left, right)
 }
